@@ -4,9 +4,7 @@ Referee app for hidden Task Forces in an in-person, two-player blind game of
 *Task Force: Carrier Battles in the Pacific*.
 
 The rules of the variant, written for players, are in
-[BLIND_VARIANT_RULES.md](BLIND_VARIANT_RULES.md). The original build brief and its
-revision are in `Task Force Blind Search Tracker Build Spec.md` and
-`Task Force Blind Search Tracker Revision 2.md`.
+[BLIND_VARIANT_RULES.md](BLIND_VARIANT_RULES.md).
 
 ## Run
 
