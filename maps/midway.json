@@ -1,0 +1,22 @@
+{
+  "id": "midway",
+  "name": "Midway",
+  "cols": [1, 29],
+  "rows": { "odd": [2, 19], "even": [1, 19] },
+  "bases": [{ "id": "midway", "name": "Midway", "hex": "1409", "side": "allies", "defaultZones": 0 }],
+  "blockedHexsides": [],
+  "image": "midway.png",
+  "aspect": 1.399,
+  "calibrationHexes": ["0201", "2801", "0219"],
+  "optionalRules": [
+    {
+      "id": "midwayPby",
+      "label": "PBY night search (Midway scenario 6.5.2)",
+      "side": "allies",
+      "turns": [1, 2],
+      "center": "1409",
+      "radius": 8
+    }
+  ],
+  "calibration": { "x0": 0.07902, "y0": 0.03912, "dx": 0.02999, "dy": 0.048504 }
+}

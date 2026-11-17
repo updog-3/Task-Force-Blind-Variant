@@ -1,0 +1,9 @@
+node_modules/
+client/dist/
+data/
+# Map art and rulebooks belong to VUCA: never commit or publish them.
+maps/*.png
+maps/*.jpg
+maps/*.webp
+rules-ref/*.pdf
+.DS_Store
