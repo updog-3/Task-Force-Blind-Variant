@@ -28,14 +28,23 @@ rules such as the Midway PBY search, and the reminders shown to the players.
 Each map is a data file in `maps/` (`midway`, `coralSea`, `easternSolomons`,
 `fleetVsFleet`) holding the grid, calibration, printed base sites and terrain
 (all-land hexes and the land or reef hexsides that block ships). The image it names
-is git-ignored: it belongs to VUCA and must not be committed or published. Without
-it the app draws a plain numbered hex grid.
+is git-ignored: it belongs to VUCA and is not committed. Without images, it the app
+draws a plain numbered hex grid.
 
 Calibration is stored as fractions of the image, so any resolution (or a different
 image) works. To recalibrate, open **Calibrate the map grid and check terrain** on
 the home page, tap the centres of the three hexes it asks for, check the overlay and
 save. The same page draws the terrain data over the map, so it can be checked
 against the printed coastlines and reefs and corrected in the JSON file.
+
+### Obtaining map images
+
+Map images can be obtained from the [Task Force VASSAL module](https://vucasimulations.com/pages/downloads), published by VUCA. Download the module, change file extension to .zip, extract and navigate to /images, and:
+
+  - Copy `5 Coral Sea.png` to the /maps directory and rename `coralSea.png`.
+  - Copy `6 Midway.png` to the /maps directory and rename `midway.png`.
+  - Copy `7.E.Solmons.png` to the /maps directory and rename `easternSolomons.png`.
+  - Copy `Fictional Map2.png` to the /maps directory and rename `fleetVsFleet.png`.
 
 ## Develop
 
