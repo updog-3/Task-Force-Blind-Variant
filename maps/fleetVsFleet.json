@@ -1,0 +1,14 @@
+{
+  "id": "fleetVsFleet",
+  "name": "Combined Fleet vs Pacific Fleet",
+  "cols": [1, 21],
+  "rows": { "odd": [1, 25], "even": [1, 26] },
+  "lowColumns": "odd",
+  "sites": [],
+  "land": [],
+  "blockedHexsides": [],
+  "image": "fleetVsFleet.png",
+  "aspect": 0.7148,
+  "calibrationHexes": ["0201", "2001", "0226"],
+  "calibration": { "x0": 0.08054, "y0": 0.04306, "dx": 0.04196, "dy": 0.034634 }
+}

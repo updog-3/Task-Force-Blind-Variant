@@ -18,6 +18,8 @@ export interface MapProps {
   onPoint?: (fx: number, fy: number) => void;
   points?: { x: number; y: number }[];
   numbers?: boolean;
+  /** Draw the map's terrain data: all-land hexes and land or reef hexsides. Always drawn when there is no map art. */
+  terrain?: boolean;
   calibration?: Calibration;
   children?: ReactNode;
 }
@@ -39,7 +41,7 @@ export function HexMap(p: MapProps) {
 
   const centers = useMemo(() => {
     const out: Record<string, { x: number; y: number }> = {};
-    for (const h of map.hexes) out[h] = hexCenter(cal, h, W, H);
+    for (const h of map.hexes) out[h] = hexCenter(cal, h, W, H, map.oddLow);
     return out;
   }, [map, cal, W, H]);
   const outline = (c: { x: number; y: number }) =>
@@ -157,6 +159,38 @@ export function HexMap(p: MapProps) {
     });
   }, [p.pins, centers, rx, ry]);
 
+  // Interior shading for zones. Where zones of the same kind overlap, the layers composite like
+  // real translucent sheets (opacity 1 - (1 - a)^n), so an overlap reads darker but never saturates.
+  const pinFills = useMemo(() => {
+    const cover = new Map<string, { hex: string; kind: string; n: number }>();
+    for (const pin of p.pins ?? []) {
+      const kind = (pin.cls ?? '').split(' ').find((c) => c === 'draft' || c === 'pby') ?? 'report';
+      const weight = (pin.cls ?? '').includes('old') ? 0.5 : 1; // earlier turns' reports count for less
+      for (const h of pin.hexes) {
+        if (!centers[h]) continue;
+        const key = `${kind}|${h}`;
+        const c = cover.get(key) ?? { hex: h, kind, n: 0 };
+        c.n += weight;
+        cover.set(key, c);
+      }
+    }
+    return [...cover.values()].map((c) => ({ ...c, opacity: Math.min(0.62, 1 - (1 - 0.2) ** c.n) }));
+  }, [p.pins, centers]);
+
+  // Terrain from the map file: blocked hexsides are the edges two neighbouring hexes share.
+  const blockedSides = useMemo(() => {
+    if (!p.terrain && image) return '';
+    const corners = (c: { x: number; y: number }) =>
+      [[-rx, 0], [-rx / 2, -ry], [rx / 2, -ry], [rx, 0], [rx / 2, ry], [-rx / 2, ry]].map(([dx, dy]) => [c.x + dx, c.y + dy]);
+    return (def.blockedHexsides ?? []).map(([a, b]) => {
+      if (!centers[a] || !centers[b]) return '';
+      const vb = corners(centers[b]);
+      const shared = corners(centers[a]).filter((v) => vb.some((w) => Math.hypot(v[0] - w[0], v[1] - w[1]) < rx * 0.05));
+      return shared.length === 2 ? `M${shared[0][0]},${shared[0][1]}L${shared[1][0]},${shared[1][1]}` : '';
+    }).join('');
+  }, [def, centers, rx, ry, p.terrain, image]);
+  const showTerrain = p.terrain || !image;
+
   const fs = ry * 0.42;
   return (
     <div className="map">
@@ -173,16 +207,21 @@ export function HexMap(p: MapProps) {
           ? <image href={image.url} x={0} y={0} width={W} height={H} />
           : <rect x={0} y={0} width={W} height={H} className="sea" />}
         <path d={grid} className={image && !p.numbers ? 'grid faint' : 'grid'} />
+        {showTerrain && (def.land ?? []).map((h) => centers[h] && <path key={h} d={outline(centers[h])} className="landhex" />)}
+        {showTerrain && <path d={blockedSides} className="blockedside" strokeWidth={ry * 0.12} />}
         {Object.entries(p.fills ?? {}).map(([h, cls]) => centers[h] && <path key={h} d={outline(centers[h])} className={`fill ${cls}`} />)}
         {(p.numbers || !image) && map.hexes.map((h) => (
           <text key={h} x={centers[h].x} y={centers[h].y - ry * 0.55} className={image ? 'hexno over' : 'hexno'} fontSize={ry * 0.28}>{h}</text>
         ))}
-        {!image && def.bases.map((b) => centers[b.hex] && (
+        {!image && def.sites.map((b) => centers[b.hex] && (
           <text key={b.id} x={centers[b.hex].x} y={centers[b.hex].y + ry * 0.75} className="basename" fontSize={ry * 0.3}>★ {b.name}</text>
+        ))}
+        {pinFills.map((f) => (
+          <path key={`${f.kind}${f.hex}`} d={outline(centers[f.hex])} className={`pinfill ${f.kind}`} fillOpacity={f.opacity} />
         ))}
         {pins.map((pin, i) => (
           <g key={i} className={`pin ${pin.cls}`}>
-            <path d={pin.d} strokeWidth={ry * 0.07} />
+            <path d={pin.d} strokeWidth={ry * 0.11} />
             <text x={pin.x} y={pin.y} fontSize={ry * 0.3}>{pin.label}</text>
           </g>
         ))}

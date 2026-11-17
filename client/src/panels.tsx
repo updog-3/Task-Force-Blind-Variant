@@ -15,6 +15,8 @@ export interface Ctx {
   rec: Record<number, TaskForce>;
   /** Your own sighting pins, already filtered by the pins toggle. */
   pins: MapPin[];
+  /** Whether to draw the terrain overlay: all-land hexes and the land or reef hexsides that block ships. */
+  terrain: boolean;
 }
 
 const Shell = ({ map, children }: { map: ReactNode; children: ReactNode }) => (
@@ -112,7 +114,7 @@ function HiddenList({ ctx, onPick }: { ctx: Ctx; onPick?: (hex: string) => void 
 
 export function Waiting({ ctx, inviteLink }: { ctx: Ctx; inviteLink: string | null }) {
   return (
-    <Shell map={<HexMap loaded={ctx.loaded} pins={ctx.pins} />}>
+    <Shell map={<HexMap loaded={ctx.loaded} terrain={ctx.terrain} pins={ctx.pins} />}>
       <h2>Waiting for the other player</h2>
       {inviteLink ? <>
         <p>Send this invite link to the {SIDE_NAME[other(ctx.view.you)]} player. It claims their seat the first time it is opened.</p>
@@ -135,7 +137,7 @@ export function Setup({ ctx }: { ctx: Ctx }) {
   return (
     <Shell map={
       <HexMap
-        loaded={loaded} pins={ctx.pins} tokens={tokensOf(rec)} fills={tf?.hex ? { [tf.hex]: 'sel' } : {}}
+        loaded={loaded} terrain={ctx.terrain} pins={ctx.pins} tokens={tokensOf(rec)} fills={tf?.hex ? { [tf.hex]: 'sel' } : {}}
         onHex={(hex) => { if (num && !done) send({ type: 'placeTf', number: num, hex }); }}
       />
     }>
@@ -172,7 +174,7 @@ export function Setup({ ctx }: { ctx: Ctx }) {
               onChange={(e) => send({ type: 'editBase', baseId: b.id, zoneCount: Number(e.target.value) })} />
           </label>
         ))}
-        <p className="muted small">Midway does no regular reconnaissance (scenario 6.5.2), so its count starts at 0.</p>
+        <p className="muted small">Zone counts come from the scenario; a base with 0 zones does no reconnaissance.</p>
       </>}
       <ConfirmBar ctx={ctx} label="Setup complete" />
     </Shell>
@@ -204,7 +206,7 @@ export function Movement({ ctx }: { ctx: Ctx }) {
   const allow = tf ? moveAllowance(arranged, tf, info, view.flags) : 0;
   const path = tf ? pathOf(tf.number) : [];
   const canStep = !!tf && editable && !path.includes(EXIT) && path.length < allow;
-  const steps = canStep ? map.neighbors(endOf(tf!)) : [];
+  const steps = canStep ? map.steps(endOf(tf!)) : []; // land and reef hexsides are never offered
 
   const setPath = (n: number, p: string[]) => {
     const moves = { ...order.moves };
@@ -226,11 +228,18 @@ export function Movement({ ctx }: { ctx: Ctx }) {
   };
   const onHex = (hex: string) => {
     if (canStep && steps.includes(hex)) { setPath(tf!.number, [...path, hex]); return; }
-    setSelHex(hex);
+    // Tapping a hex selects a Task Force there; tapping it again cycles through the others in the stack.
     const here = hidden.filter((t) => t.hex === hex);
-    select(here.length === 1 ? here[0].number : null);
+    const at = here.findIndex((t) => t.number === selTf);
+    select(here.length ? here[(at + 1) % here.length].number : null);
     setSelHex(hex);
   };
+  // Esc deselects.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setSelTf(null); setSelHex(null); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const fills: Record<string, string> = {};
   for (const s of steps) fills[s] = 'step';
@@ -249,7 +258,7 @@ export function Movement({ ctx }: { ctx: Ctx }) {
   const mates = tf ? hidden.filter((t) => t.hex === tf.hex && t.number !== tf.number) : [];
 
   return (
-    <Shell map={<HexMap loaded={loaded} pins={ctx.pins} tokens={tokens} fills={fills} lines={lines} onHex={onHex} />}>
+    <Shell map={<HexMap loaded={loaded} terrain={ctx.terrain} pins={ctx.pins} tokens={tokens} fills={fills} lines={lines} onHex={onHex} />}>
       <h2>Naval Movement</h2>
       {draft && <>
         <p className="muted small">
@@ -266,7 +275,10 @@ export function Movement({ ctx }: { ctx: Ctx }) {
           ))}
           {hidden.length === 0 && <li className="muted">None: everything is on the board or gone.</li>}
         </ul>
-        {selHex && !tf && <p className="muted small">Hex {selHex}: {here.length ? `pick ${here.map((t) => `TF ${t.number}`).join(' or ')} above` : 'none of your hidden Task Forces here'}.</p>}
+        {selHex && !tf && <p className="muted small">Hex {selHex}: none of your hidden Task Forces here.</p>}
+        {tf && here.length > 1 && here.some((t) => t.number === tf.number) && <p className="muted small">
+          {here.length} Task Forces in hex {selHex}: {here.map((t) => `TF ${t.number}`).join(', ')}. Tap the hex again to switch; Esc deselects.
+        </p>}
         {tf && <div className="box">
           <b>TF {tf.number}</b> at {tf.hex} · may move {allow} hex{allow === 1 ? '' : 'es'}
           {editable && <>
@@ -346,7 +358,7 @@ export function Board({ ctx }: { ctx: Ctx }) {
   if (loaded.map.has(hex)) fills[hex] ??= 'sel';
   const found = check ? check.groups.flatMap((g) => g.numbers) : [];
   return (
-    <Shell map={<HexMap loaded={loaded} pins={ctx.pins} tokens={tokensOf(rec)} fills={fills} onHex={setHex} />}>
+    <Shell map={<HexMap loaded={loaded} terrain={ctx.terrain} pins={ctx.pins} tokens={tokensOf(rec)} fills={fills} onHex={setHex} />}>
       <h2>Board phases</h2>
       <p>Play Naval Combat and Aircraft Operations on the physical board. The app is standing by.</p>
       {view.searches.map((r) => (
@@ -433,7 +445,10 @@ export function Recon({ ctx }: { ctx: Ctx }) {
   if (editable && cur && from && map.has(from)) {
     for (const h of map.within(from, ZONE_RANGE)) fills[h] = 'range';
   }
-  if (view.stage === 'draft') for (const z of zones) for (const h of map.zone(z.center)) fills[h] = 'zone';
+  // Drafted zones: each gets its own solid outline and a numbered label; overlaps shade darker.
+  const zonePins: MapPin[] = view.stage === 'draft'
+    ? zones.map((z, i) => ({ hexes: map.zone(z.center), label: `Zone ${i + 1}`, cls: 'draft' }))
+    : [];
   if (editable && from && map.has(from)) fills[from] ??= 'src';
   const onHex = (hex: string) => {
     if (!editable || !cur) return;
@@ -442,7 +457,7 @@ export function Recon({ ctx }: { ctx: Ctx }) {
   };
 
   return (
-    <Shell map={<HexMap loaded={loaded} pins={ctx.pins} tokens={tokensOf(rec)} fills={fills} onHex={onHex} />}>
+    <Shell map={<HexMap loaded={loaded} terrain={ctx.terrain} pins={[...ctx.pins, ...zonePins]} tokens={tokensOf(rec)} fills={fills} onHex={onHex} />}>
       <h2>Reconnaissance</h2>
       {view.stage === 'draft' && <>
         <p className="muted small">Pick a source, then tap a zone centre within {ZONE_RANGE} hexes of it. A zone is the centre plus its six neighbours. Placing fewer zones, or none, is allowed. Each zone draws one chit and reports only how many Carrier and Fleet Task Forces it holds.</p>
@@ -467,7 +482,7 @@ export function Recon({ ctx }: { ctx: Ctx }) {
         <ul className="list">
           {zones.map((z, i) => (
             <li key={z.id}>
-              <b>{z.center}</b>
+              <span className="tag">Zone {i + 1}</span><b>{z.center}</b>
               <span className="muted small">from {z.source.kind === 'tf' ? `TF ${z.source.number}` : z.source.id}</span>
               <span className="grow" />
               {editable && <button className="small" onClick={() => setZones(drafts().filter((_, j) => j !== i))}>✕</button>}
@@ -506,7 +521,7 @@ export function Dusk({ ctx }: { ctx: Ctx }) {
   ];
   return (
     <Shell map={
-      <HexMap loaded={loaded} pins={ctx.pins} tokens={tokens} fills={sel && entry(sel).hex ? { [entry(sel).hex!]: 'sel' } : {}}
+      <HexMap loaded={loaded} terrain={ctx.terrain} pins={ctx.pins} tokens={tokens} fills={sel && entry(sel).hex ? { [entry(sel).hex!]: 'sel' } : {}}
         onHex={(hex) => { if (sel && !done) set(sel, { hex }); }} />
     }>
       <h2>Dusk reset</h2>
@@ -564,7 +579,7 @@ export function Ended({ ctx }: { ctx: Ctx }) {
     }
   }
   return (
-    <Shell map={<HexMap loaded={loaded} pins={ctx.pins} tokens={tokens} numbers={false} />}>
+    <Shell map={<HexMap loaded={loaded} terrain={ctx.terrain} pins={ctx.pins} tokens={tokens} numbers={false} />}>
       <h2>Game over</h2>
       <p className="muted small">Everything is revealed. Check setup, moves and victory conditions against the scenario book. Revealed Task Forces are shown at the hex where they were revealed.</p>
       {(['ijn', 'allies'] as const).map((side) => {

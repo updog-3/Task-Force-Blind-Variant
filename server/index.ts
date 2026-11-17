@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { getMap, MAP_IDS, RuleError, type Rng, type Side } from '../rules';
+import { getMap, MAP_IDS, RuleError, SCENARIOS, scenarioNotes, SIDE_NAME, type Rng, type Side } from '../rules';
 import type { ClientMsg, InfoResponse, ServerMsg } from './protocol';
 import { HttpError, Sessions, type Subscriber } from './sessions';
 import { Store } from './store';
@@ -78,10 +78,18 @@ export async function startServer(opts: ServerOptions = {}) {
       if (req.method === 'GET' && parts[1] === 'info') {
         const info: InfoResponse = {
           lanUrls: lanUrls(port),
-          maps: MAP_IDS.map((id) => {
-            const def = getMap(id).def;
-            return { id, name: def.name, optionalRules: (def.optionalRules ?? []).map((r) => ({ id: r.id, label: r.label })) };
-          }),
+          maps: MAP_IDS.map((id) => ({ id, name: getMap(id).def.name })),
+          scenarios: SCENARIOS.map((sc) => ({
+            id: sc.id, label: sc.label, startingTurn: sc.startingTurn, defaultZones: sc.defaultZones,
+            optionalRules: sc.optionalRules.map((r) => ({ id: r.id, label: r.label, default: r.default })),
+            variants: sc.variants.map((v) => {
+              const def = getMap(v.mapId).def;
+              return {
+                mapId: v.mapId, mapName: def.name, label: v.label, notes: scenarioNotes(sc, v.mapId),
+                bases: v.bases.map((b) => `${def.sites.find((x) => x.id === b.site)?.name} (${SIDE_NAME[b.side]}, ${b.zones} zone${b.zones === 1 ? '' : 's'})`),
+              };
+            }),
+          })),
         };
         return json(res, 200, info);
       }

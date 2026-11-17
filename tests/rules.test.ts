@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyAction, chitKind, CUP_SIZE, drawChit, getMap, hexDist, resolveZone, seededRng, turnInfo, viewFor,
+  applyAction, areaHexes, chitKind, createGame, CUP_SIZE, drawChit, getMap, getScenario, hexCenter, hexDist, resolveZone,
+  SCENARIOS, seededRng, turnInfo, viewFor,
   RuleError, type GameState, type Side, type Zone, type ZoneDraft,
 } from '../rules';
+import { join } from '../rules';
 import { act, advance, game, move, rng, tf, toBoard, toRecon } from './helpers';
 
 const map = getMap('midway');
@@ -27,6 +29,250 @@ describe('hex grid', () => {
     expect(map.has('2919')).toBe(true);
     expect(map.isEdge('0201')).toBe(true);
     expect(map.isEdge('1409')).toBe(false);
+  });
+});
+
+describe('Coral Sea map', () => {
+  const coral = getMap('coralSea');
+  const cs = (turn: number, place: Parameters<typeof game>[1], rules: string[] = []) => game(turn, place, undefined, rules, 'coralSea');
+
+  it('runs from 0101 across 33 columns: 19 rows in odd columns, 18 in even ones', () => {
+    expect(coral.hexes.length).toBe(17 * 19 + 16 * 18);
+    for (const h of ['0101', '0119', '0201', '0218', '3301', '3319', '3218']) expect(coral.has(h), h).toBe(true);
+    for (const h of ['0219', '3219', '3401', '0120', '0100']) expect(coral.has(h), h).toBe(false);
+    // Even columns sit half a hex lower, as on Midway.
+    expect(coral.neighbors('2011').sort()).toEqual(['1911', '1912', '2010', '2012', '2111', '2112']);
+    expect(cs(1, { ijn: { 1: '1409' }, allies: { 1: '3010' } }).bases).toEqual([]); // scenario 5 has no land bases
+  });
+
+  it('terrain data is consistent', () => {
+    for (const h of coral.def.land!) expect(coral.has(h), h).toBe(true);
+    for (const [a, b] of coral.def.blockedHexsides) {
+      expect(hexDist(a, b), `${a}-${b}`).toBe(1);
+      expect(coral.isLand(a) || coral.isLand(b), `${a}-${b} is implied by a land hex`).toBe(false);
+    }
+    expect(getMap('midway').steps('1409').length).toBe(6); // Midway has no terrain
+  });
+
+  it('ships cannot be placed on, or move into, an all-land hex', () => {
+    expect(coral.isLand('0416')).toBe(true);
+    expect(() => cs(1, { ijn: { 1: '0416' }, allies: { 1: '3010' } })).toThrow(/all land/);
+    const s = cs(1, { ijn: { 1: '0418' }, allies: { 1: '3010' } });
+    expect(coral.neighbors('0418')).toContain('0417');
+    expect(coral.isLand('0417')).toBe(false);
+    expect(coral.neighbors('0417')).toContain('0416');
+    expect(() => act(s, 'ijn', { type: 'setMoveOrder', ops: [], moves: { 1: ['0417', '0416'] } })).toThrow(/all land/);
+  });
+
+  it('land and reef hexsides block movement', () => {
+    const s = cs(1, { ijn: { 1: '1314', 2: '1014', 7: '1105' }, allies: { 1: '3010' } });
+    expect(coral.isBlocked('1314', '1414')).toBe(true);  // reef
+    expect(coral.isBlocked('1414', '1314')).toBe(true);
+    expect(coral.isBlocked('1104', '1105')).toBe(true);  // Bougainville
+    expect(() => act(s, 'ijn', { type: 'setMoveOrder', ops: [], moves: { 1: ['1414'] } })).toThrow(/Land or reef blocks/);
+    expect(() => act(s, 'ijn', { type: 'setMoveOrder', ops: [], moves: { 7: ['1104'] } })).toThrow(/Land or reef blocks/);
+    expect(coral.steps('1314')).not.toContain('1414');
+    // The waterway past New Guinea's tip (scenario 5.6.2) runs 1115 -> 1015 -> 1016.
+    // 1014-1015 is contiguous land and stays blocked.
+    expect(() => act(s, 'ijn', { type: 'setMoveOrder', ops: [], moves: { 2: ['1015'] } })).toThrow(/Land or reef blocks/);
+    expect(coral.steps('1015').sort()).toEqual(['0916', '1016', '1115']);
+    let r = move(s, { 2: ['1114', '1115'] }, {});
+    expect(tf(r, 'ijn', 2)).toMatchObject({ status: 'hidden', hex: '1115' });
+    r = move(advance(advance(r)), { 2: ['1015', '1016'] }, {});
+    expect(r.turn).toBe(2);
+    expect(tf(r, 'ijn', 2)).toMatchObject({ status: 'hidden', hex: '1016' });
+    // Every sea hex can still be reached from every other: terrain never seals off part of the map.
+    const sea = coral.hexes.filter((h) => !coral.isLand(h));
+    const seen = new Set(['3319']);
+    const queue = ['3319'];
+    while (queue.length) for (const n of coral.steps(queue.pop()!)) if (!seen.has(n)) { seen.add(n); queue.push(n); }
+    expect(sea.filter((h) => !seen.has(h))).toEqual([]);
+  });
+
+  it('there is no contact across a land or reef hexside', () => {
+    const blocked = cs(3, { ijn: { 1: '1314' }, allies: { 1: '1414' } });
+    const r = move(blocked, {}, {});
+    expect(tf(r, 'ijn', 1).status).toBe('hidden');
+    expect(tf(r, 'allies', 1).status).toBe('hidden');
+    const open = move(cs(3, { ijn: { 1: '2010' }, allies: { 1: '2011' } }), {}, {});
+    expect(tf(open, 'ijn', 1).status).toBe('revealed');
+    // Searches and raid checks are flown, so terrain does not limit them.
+    const b = toBoard(blocked);
+    expect(act(b, 'ijn', { type: 'raidCheck', hex: '1414' }).raidCheck.ijn)
+      .toEqual({ hex: '1414', adjacent: true, groups: [{ hex: '1314', numbers: [1] }] });
+  });
+
+  it('the PBY optional rule belongs to the Midway scenario only', () => {
+    expect(SCENARIOS.filter((sc) => sc.optionalRules.some((r) => r.id === 'midwayPby')).map((sc) => sc.id)).toEqual(['sc6']);
+    const s = toBoard(cs(1, { ijn: { 1: '1409' }, allies: { 1: '3010' } }, ['midwayPby']));
+    expect(s.optionalRules).toEqual([]); // asking for it in another scenario is ignored
+    expect(viewFor(s, 'allies').searches).toEqual([]);
+    expect(() => act(s, 'allies', { type: 'optionalSearch', ruleId: 'midwayPby' })).toThrow(/not available/);
+  });
+});
+
+describe('Eastern Solomons map', () => {
+  const es = getMap('easternSolomons');
+  const play = (turn: number, place: Parameters<typeof game>[1]) => game(turn, place, undefined, ['midwayPby'], 'easternSolomons');
+
+  it("uses Midway's layout, with terrain and one Allied base", () => {
+    expect(es.hexes.length).toBe(536);
+    expect(es.hexes).toEqual(getMap('midway').hexes);
+    expect(es.def.sites.map((x) => `${x.id} ${x.hex}`)).toEqual(['henderson 1410', 'buka 0618']);
+    expect(play(3, { ijn: { 1: '0303' }, allies: { 1: '2803' } }).bases)
+      .toEqual([{ id: 'henderson', name: 'Henderson', hex: '1410', side: 'allies', zoneCount: 1 }]);
+    for (const [a, b] of es.def.blockedHexsides) expect(hexDist(a, b), `${a}-${b}`).toBe(1);
+    // Every sea hex is reachable; the reef ring around 2009 is open only to the south.
+    const seen = new Set(['2919']);
+    const queue = ['2919'];
+    while (queue.length) for (const n of es.steps(queue.pop()!)) if (!seen.has(n)) { seen.add(n); queue.push(n); }
+    expect(es.hexes.filter((h) => !seen.has(h))).toEqual([]);
+    expect(es.steps('2009').sort()).toEqual(['1910', '2010']);
+    expect(es.isBlocked('1410', '1510')).toBe(true); // Guadalcanal
+  });
+
+  it('Henderson is a 1-zone search source, and an IJN Task Force entering its hex is revealed', () => {
+    let s = play(3, { ijn: { 7: '1311', 1: '0303' }, allies: { 1: '2803' } });
+    expect(s.optionalRules).toEqual([]); // no PBY here
+    expect(s.bases[0].zoneCount).toBe(1);
+    expect(es.steps('1311')).toContain('1410');
+    s = move(s, { 7: ['1410'] }, {});
+    expect(tf(s, 'ijn', 7)).toMatchObject({ status: 'revealed', revealReason: 'base', lastHex: '1410' });
+    s = advance(advance(s));
+    expect(s.phase).toBe('recon');
+    const base = { kind: 'base' as const, id: 'henderson' };
+    expect(() => act(s, 'allies', { type: 'setSearchOrder', zones: [{ source: base, center: '1010' }, { source: base, center: '1011' }] }))
+      .toThrow(/at most 1 zone/);
+    expect(() => act(s, 'allies', { type: 'setSearchOrder', zones: [{ source: base, center: '0510' }] })).toThrow(/more than 8/);
+    expect(() => act(s, 'ijn', { type: 'setSearchOrder', zones: [{ source: base, center: '1010' }] })).toThrow(/cannot search/);
+    expect(act(s, 'allies', { type: 'setSearchOrder', zones: [{ source: base, center: '0610' }] }).searchOrders.allies[0].sourceHex).toBe('1410');
+  });
+});
+
+describe('Combined Fleet vs Pacific Fleet map', () => {
+  const fic = getMap('fleetVsFleet');
+
+  it('has 21 columns with the odd columns half a hex lower', () => {
+    expect(fic.hexes.length).toBe(11 * 25 + 10 * 26);
+    for (const h of ['0101', '0125', '0201', '0226', '2101', '2125', '2026']) expect(fic.has(h), h).toBe(true);
+    for (const h of ['0126', '2126', '2201', '0227']) expect(fic.has(h), h).toBe(false);
+    // 0201 is the top corner: 0101 and 0301 hang below it on either side.
+    expect(fic.neighbors('0201').sort()).toEqual(['0101', '0202', '0301']);
+    expect(fic.neighbors('1113').sort()).toEqual(['1013', '1014', '1112', '1114', '1213', '1214']);
+    expect(fic.neighbors('1013').sort()).toEqual(['0912', '0913', '1012', '1014', '1112', '1113']);
+    expect(fic.dist('1113', '1014')).toBe(1);
+    expect(fic.dist('1113', '1012')).toBe(2);
+    expect(hexDist('1113', '1014')).toBe(2); // the other maps' stagger would get this wrong
+    const cal = fic.def.calibration;
+    expect(hexCenter(cal, '0101', 1, 1, true).y).toBeGreaterThan(hexCenter(cal, '0201', 1, 1, true).y);
+    // Every hex has as many neighbours-of as neighbours: the adjacency is symmetric.
+    for (const h of fic.hexes) for (const n of fic.neighbors(h)) expect(fic.neighbors(n), `${n} -> ${h}`).toContain(h);
+  });
+});
+
+describe('scenarios', () => {
+  it('every scenario and map choice creates a playable game', () => {
+    expect(SCENARIOS.map((sc) => sc.id)).toEqual(['sc5', 'sc6', 'sc7', 'sc8', 'sc9', 'sc10a', 'sc10b', 'custom']);
+    for (const sc of SCENARIOS) for (const v of sc.variants) {
+      const s = createGame({ scenarioId: sc.id, mapId: v.mapId });
+      const map = getMap(s.mapId);
+      expect([s.scenarioId, s.mapId, s.turn]).toEqual([sc.id, v.mapId, sc.startingTurn]);
+      expect(s.flags.defaultZones).toEqual(sc.defaultZones);
+      expect(s.bases.length).toBe(v.bases.length);
+      for (const b of s.bases) {
+        expect(map.has(b.hex), `${sc.id} ${b.name}`).toBe(true);
+        expect(map.isLand(b.hex), `${sc.id} ${b.name} can be reached`).toBe(false);
+        expect(map.steps(b.hex).length, `${sc.id} ${b.name} can be reached`).toBeGreaterThan(0);
+      }
+      for (const r of sc.optionalRules) expect(map.has(r.center)).toBe(true);
+      for (const a of sc.areaSearches) for (const h of a.hexes) expect(map.has(h)).toBe(true);
+    }
+  });
+
+  it('the scenario decides the map, starting turn, zone counts, bases and optional rules', () => {
+    const midway = createGame({ scenarioId: 'sc6' });
+    expect(midway.optionalRules).toEqual(['midwayPby']); // on by default for scenario 6
+    expect(createGame({ scenarioId: 'sc6', optionalRules: [] }).optionalRules).toEqual([]);
+    expect(createGame({ scenarioId: 'sc6', startingTurn: 5 }).turn).toBe(5);
+    const sc8 = game(1, { ijn: { 1: '0412' }, allies: { 1: '1711' } }, undefined, [], 'sc8');
+    expect([sc8.mapId, tf(sc8, 'ijn', 1).zoneCount, tf(sc8, 'allies', 1).zoneCount]).toEqual(['fleetVsFleet', 1, 2]);
+    expect(createGame({ scenarioId: 'sc8', flags: { defaultZones: { ijn: 2, allies: 3 } } }).flags.defaultZones).toEqual({ ijn: 2, allies: 3 });
+    expect(createGame({ scenarioId: 'sc10a' }).bases.map((b) => `${b.name} ${b.side} ${b.zoneCount}`))
+      .toEqual(['Henderson allies 2', 'Buka ijn 1']);
+    expect(() => createGame({ scenarioId: 'sc5', mapId: 'midway' })).toThrow(/not played on that map/);
+    expect(() => createGame({ scenarioId: 'nope' })).toThrow(/Unknown scenario/);
+    expect(createGame({ scenarioId: 'custom', mapId: 'fleetVsFleet' }).bases).toEqual([]);
+  });
+
+  it('the Second Naval Battle of Guadalcanal can be played on either map', () => {
+    const held = createGame({ scenarioId: 'sc10b', mapId: 'easternSolomons' });
+    expect(held.bases.find((b) => b.id === 'henderson')).toMatchObject({ side: 'allies', hex: '1410', zoneCount: 2 });
+    const lost = createGame({ scenarioId: 'sc10b', mapId: 'coralSea' });
+    expect(lost.mapId).toBe('coralSea');
+    expect(lost.bases.map((b) => `${b.name} ${b.side}`)).toEqual([
+      'Rabaul ijn', 'Buka ijn', 'Gasmata ijn', 'Lae ijn', 'Henderson ijn', 'Port Moresby allies',
+    ]);
+    expect(createGame({ scenarioId: 'sc10b' }).mapId).toBe('easternSolomons'); // the first choice is the default
+    // An Allied Task Force entering an IJN base hex is revealed, just as the IJN is at an Allied one.
+    let s = createAndPlace('coralSea', { ijn: { 1: '2010' }, allies: { 7: '1005' } });
+    s = move(s, {}, { 7: ['1004'] });
+    expect(tf(s, 'allies', 7)).toMatchObject({ status: 'revealed', revealReason: 'base', lastHex: '1004' });
+  });
+
+  function createAndPlace(mapId: string, place: { ijn: Record<number, string>; allies: Record<number, string> }) {
+    let s = createGame({ scenarioId: 'sc10b', mapId });
+    s = join(join(s, 'ijn'), 'allies');
+    for (const side of ['ijn', 'allies'] as const) for (const [n, hex] of Object.entries(place[side])) s = act(s, side, { type: 'placeTf', number: Number(n), hex });
+    return act(act(s, 'ijn', { type: 'confirm', value: true }), 'allies', { type: 'confirm', value: true });
+  }
+
+  it('scenario 9: the Ceylon patrol searches its area in every Reconnaissance phase and reports counts only', () => {
+    const fic = getMap('fleetVsFleet');
+    const area = getScenario('sc9').areaSearches[0];
+    const inside = areaHexes('fleetVsFleet', area);
+    expect(inside).toEqual(expect.arrayContaining(['2107', '2110', '1808', '1710']));
+    expect(inside).not.toContain('1608');
+    expect(fic.dist('2110', '1710')).toBe(4);
+    const start = () => toRecon(game(3, { ijn: { 1: '1808', 7: '1710', 8: '0305' }, allies: { 1: '2122' } }, undefined, [], 'sc9'));
+    const run = (chits: number[]) => {
+      let s = start();
+      s.cup = [...chits, 54];
+      const before = JSON.stringify(s.tfs);
+      s = act(s, 'ijn', { type: 'lock', value: true }, inOrder);
+      s = act(s, 'allies', { type: 'lock', value: true }, inOrder);
+      expect(JSON.stringify(s.tfs)).toBe(before); // nothing changes status
+      expect(s.cup).toEqual([54]);                // one chit per Task Force in the area, none for TF 8
+      return s;
+    };
+    const told = (s: GameState, side: Side) => s.notices.filter((n) => n.to === side).map((n) => n.text);
+
+    // Both detected: the true types.
+    let s = run([DETECTED, DETECTED]);
+    expect(told(s, 'allies')).toEqual(['Search results\nCeylon patrol (9.5.2): 1 Carrier Task Force, 1 Fleet Task Force sighted']);
+    expect(told(s, 'ijn')).toEqual(['TF 1 and TF 7 were sighted this turn. They stay hidden.']);
+    expect(viewFor(s, 'allies').pins).toEqual([
+      { side: 'allies', day: 1, turn: 3, kind: 'area', center: '2107', areaId: 'ceylonPatrol', carriers: 1, fleets: 1 },
+    ]);
+    const json = JSON.stringify(viewFor(s, 'allies'));
+    for (const hex of ['1808', '1710', '0305']) expect(json).not.toContain(hex);
+    expect(viewFor(s, 'ijn').pins).toEqual([]);
+    // Both misdirected: the carrier reads as a Fleet, and the fleet as a Carrier (cap 1).
+    expect(told(run([MISDIRECT, MISDIRECT]), 'allies')[0]).toMatch(/1 Carrier Task Force, 1 Fleet Task Force sighted/);
+    // The carrier is truly seen, so the cap of 1 is used up and the misdirected fleet stays a Fleet.
+    s = run([DETECTED, MISDIRECT]);
+    expect(s.results.at(-1)).toMatchObject({ kind: 'area', cap: 1, carriers: 1, fleets: 1 });
+    // Only the fleet is seen, misdirected: 1 Carrier.
+    s = run([NO_CONTACT, MISDIRECT]);
+    expect(told(s, 'allies')[0]).toMatch(/Ceylon patrol \(9.5.2\): 1 Carrier Task Force sighted$/);
+    expect(told(s, 'ijn')).toEqual(['TF 7 was sighted this turn. It stays hidden.']);
+    s = run([NO_CONTACT, NO_CONTACT]);
+    expect(told(s, 'allies')).toEqual(['Search results\nCeylon patrol (9.5.2): No contact']);
+    expect(told(s, 'ijn')).toEqual([]);
+    // Scenario 8 uses the same map but has no patrol.
+    let other8 = toRecon(game(3, { ijn: { 1: '1808' }, allies: { 1: '2122' } }, undefined, [], 'sc8'));
+    other8 = act(act(other8, 'ijn', { type: 'lock', value: true }), 'allies', { type: 'lock', value: true });
+    expect(other8.notices).toEqual([]);
+    expect(other8.cup.length).toBe(54);
   });
 });
 
@@ -488,7 +734,7 @@ describe('Midway PBY search (optional rule)', () => {
     expect(s.cup).toEqual([54]);
     expect(s.results.at(-1)).toMatchObject({ kind: 'pby', chits: [DETECTED, MISDIRECT, NO_CONTACT] });
     const told = s.notices.find((n) => n.to === 'allies' && n.kind === 'pby')!.text;
-    expect(told).toBe('PBY night search (Midway scenario 6.5.2)\nFleet sighted at 1401\nFleet sighted at 1009');
+    expect(told).toBe('PBY night search (6.5.2)\nFleet sighted at 1401\nFleet sighted at 1009');
     expect(viewFor(s, 'allies').pins).toEqual([
       { side: 'allies', day: 1, turn: 1, kind: 'pby', center: '1401' },
       { side: 'allies', day: 1, turn: 1, kind: 'pby', center: '1009' },
@@ -596,8 +842,8 @@ describe('viewFor', () => {
       // The only thing known about enemy orders is whether they are locked.
       expect(Object.keys(view).sort()).toEqual([
         'bases', 'confirmed', 'day', 'dusk', 'endRequest', 'flags', 'joined', 'locked', 'log', 'mapId', 'moveOrder',
-        'notices', 'optionalRules', 'phase', 'pins', 'raidCheck', 'searchOrder', 'searches', 'sources', 'stage',
-        'startingTurn', 'tfs', 'turn', 'turnInfo', 'you',
+        'notices', 'optionalRules', 'phase', 'pins', 'raidCheck', 'scenarioId', 'searchOrder', 'searches', 'sources',
+        'stage', 'startingTurn', 'tfs', 'turn', 'turnInfo', 'you',
       ]);
     }
     // And the other way round.

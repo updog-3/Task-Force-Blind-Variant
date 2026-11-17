@@ -114,6 +114,7 @@ export function useMap(mapId: string | undefined): LoadedMap | null {
   useEffect(() => {
     if (!mapId) return;
     let live = true;
+    setLoaded(null);
     api<MapDef>(`/maps/${mapId}.json`).then((def) => {
       const map = new GameMap(def);
       const url = `/maps/${def.image}`;

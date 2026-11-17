@@ -3,40 +3,54 @@ import { getMap } from './maps';
 import { emptyMoveOrder, resolveMovement, validateMoveOrder } from './movement';
 import { manualReveal, optionalSearch, raidLookup, resolveRecon, validateZones } from './recon';
 import type { Rng } from './rng';
+import { getScenario, getVariant } from './scenarios';
 import {
   addLog, applyOp, describeOp, isCarrierNumber, markGone, newTf, notify, onBoard, validNumber,
 } from './tf';
 import { nextTurn, turnInfo } from './turnTable';
 import {
-  DEFAULT_FLAGS, fail, other, SIDE_NAME, SIDES,
+  fail, other, SIDE_NAME, SIDES,
   type Action, type Flags, type GameState, type Side,
 } from './types';
 
 const both = <T>(f: () => T): Record<Side, T> => ({ ijn: f(), allies: f() });
 
-export function createGame(
-  opts: { mapId: string; startingTurn: number; flags?: Partial<Flags>; optionalRules?: string[] },
-): GameState {
-  const map = getMap(opts.mapId);
-  turnInfo(opts.startingTurn); // validates 1-24
+export function createGame(opts: {
+  scenarioId: string;
+  /** Needed only when the scenario offers a choice of map. */
+  mapId?: string;
+  startingTurn?: number;
+  flags?: Partial<Flags>;
+  /** Ids of the scenario's optional rules to enable. Leave out to take the scenario's defaults. */
+  optionalRules?: string[];
+}): GameState {
+  const scenario = getScenario(opts.scenarioId);
+  const variant = getVariant(scenario, opts.mapId);
+  const map = getMap(variant.mapId);
+  const startingTurn = opts.startingTurn ?? scenario.startingTurn;
+  turnInfo(startingTurn); // validates 1-24
   const f = opts.flags ?? {};
   const zones = (v: unknown, d: number) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 9 ? (v as number) : d);
   const flags: Flags = {
     enforceTransports: !!f.enforceTransports,
     cupEmpty: f.cupEmpty === 'noContact' ? 'noContact' : 'reshuffle',
     defaultZones: {
-      ijn: zones(f.defaultZones?.ijn, DEFAULT_FLAGS.defaultZones.ijn),
-      allies: zones(f.defaultZones?.allies, DEFAULT_FLAGS.defaultZones.allies),
+      ijn: zones(f.defaultZones?.ijn, scenario.defaultZones.ijn),
+      allies: zones(f.defaultZones?.allies, scenario.defaultZones.allies),
     },
   };
-  // Only rules this map lists can be switched on.
-  const wanted = Array.isArray(opts.optionalRules) ? opts.optionalRules : [];
-  const optionalRules = (map.def.optionalRules ?? []).map((r) => r.id).filter((id) => wanted.includes(id));
+  // Only rules this scenario lists can be switched on.
+  const wanted = Array.isArray(opts.optionalRules) ? opts.optionalRules : null;
+  const optionalRules = scenario.optionalRules.filter((r) => (wanted ? wanted.includes(r.id) : r.default)).map((r) => r.id);
+  const bases = variant.bases.map((b) => {
+    const site = map.def.sites.find((s) => s.id === b.site) ?? fail(`No base site ${b.site} on ${map.def.name}`);
+    return { id: site.id, name: site.name, side: b.side, hex: site.hex, zoneCount: b.zones };
+  });
   return {
-    v: 2, mapId: opts.mapId, startingTurn: opts.startingTurn, day: 1, turn: opts.startingTurn,
+    v: 3, scenarioId: scenario.id, mapId: variant.mapId, startingTurn, day: 1, turn: startingTurn,
     phase: 'waiting', stage: '', flags, optionalRules, rulesUsed: [], cup: fullCup(),
     tfs: both(() => ({})),
-    bases: map.def.bases.map((b) => ({ id: b.id, name: b.name, side: b.side, hex: b.hex, zoneCount: b.defaultZones ?? 0 })),
+    bases,
     joined: both(() => false), locked: both(() => false), confirmed: both(() => false),
     moveOrders: both(emptyMoveOrder), searchOrders: both(() => []),
     pins: both(() => []), raidCheck: both(() => null),
@@ -247,6 +261,7 @@ export function applyAction(prev: GameState, side: Side, action: Action, rng: Rn
       if (state.confirmed[side]) fail('Undo "Setup complete" to change your setup');
       if (!validNumber(action.number)) fail('Task Force numbers run from 1 to 13');
       if (!map.has(action.hex)) fail(`Hex ${action.hex} is not on the map`);
+      if (map.isLand(action.hex)) fail(`Hex ${action.hex} is all land`);
       tfs[action.number] ??= newTf(side, action.number, state.flags);
       tfs[action.number].hex = action.hex;
       break;
@@ -357,6 +372,7 @@ export function applyAction(prev: GameState, side: Side, action: Action, rng: Rn
       if (!tf || !onBoard(tf)) fail(`TF ${action.number} is not on the board`);
       const e = action.entry ?? {};
       if (e.hex && !map.has(e.hex)) fail(`Hex ${e.hex} is not on the map`);
+      if (e.hex && map.isLand(e.hex)) fail(`Hex ${e.hex} is all land`);
       state.dusk[side][action.number] = {
         hex: e.hex || undefined,
         gone: !!e.gone,

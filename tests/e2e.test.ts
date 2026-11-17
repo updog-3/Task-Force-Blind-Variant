@@ -107,17 +107,23 @@ describe('a scripted two-seat Midway game, turns 1-11', () => {
 
   it('creates a session, hands out seats and rejects a reused invite', async () => {
     const info = await (await fetch(base + '/api/info')).json() as any;
-    // Optional rules are listed per map, so the create form shows them only for the map that has them.
-    expect(info.maps).toEqual([{
-      id: 'midway', name: 'Midway',
-      optionalRules: [{ id: 'midwayPby', label: 'PBY night search (Midway scenario 6.5.2)' }],
-    }]);
-    const made = await post('/api/sessions', { mapId: 'midway', startingTurn: 1, side: 'ijn', optionalRules: ['midwayPby'] });
+    // Games are created from a scenario; optional rules and map choices come with it.
+    expect(info.maps.map((m: any) => m.id)).toEqual(['midway', 'coralSea', 'easternSolomons', 'fleetVsFleet']);
+    expect(info.scenarios.map((sc: any) => sc.id)).toEqual(['sc5', 'sc6', 'sc7', 'sc8', 'sc9', 'sc10a', 'sc10b', 'custom']);
+    const withPby = info.scenarios.filter((sc: any) => sc.optionalRules.length);
+    expect(withPby.map((sc: any) => [sc.id, sc.optionalRules])).toEqual([
+      ['sc6', [{ id: 'midwayPby', label: 'PBY night search (6.5.2)', default: true }]],
+    ]);
+    expect(info.scenarios.filter((sc: any) => sc.variants.length > 1).map((sc: any) => sc.id)).toEqual(['sc10b', 'custom']);
+    expect(info.scenarios.find((sc: any) => sc.id === 'sc7')).toMatchObject({ startingTurn: 3, defaultZones: { ijn: 2, allies: 2 } });
+    expect((await post('/api/sessions', { scenarioId: 'sc5', mapId: 'midway', side: 'ijn' })).status).toBe(400);
+    const made = await post('/api/sessions', { scenarioId: 'sc6', startingTurn: 1, side: 'ijn' });
     expect(made.status).toBe(200);
     ijn = await new Seat(made.body.id, made.body.seatToken).connect();
     expect(ijn.view.phase).toBe('waiting');
     expect(ijn.view.you).toBe('ijn');
-    expect(ijn.view.optionalRules).toEqual(['midwayPby']);
+    expect(ijn.view.optionalRules).toEqual(['midwayPby']); // on by default for scenario 6
+    expect([ijn.view.scenarioId, ijn.view.mapId]).toEqual(['sc6', 'midway']);
 
     const claimed = await post(`/api/sessions/${made.body.id}/claim`, { invite: made.body.inviteToken });
     expect(claimed.body.side).toBe('allies');

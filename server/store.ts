@@ -18,7 +18,7 @@ export interface SessionRecord {
 
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 /** Sessions saved by an older rules revision are discarded, not migrated. */
-const STATE_VERSION = 2;
+const STATE_VERSION = 3;
 
 /** Each session is one JSON state blob plus an append-only log table. */
 export class Store {

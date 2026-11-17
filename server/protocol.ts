@@ -13,10 +13,12 @@ export type ServerMsg =
   | { t: 'error'; id?: number; message: string; fatal?: boolean };
 
 export interface CreateRequest {
-  mapId: string;
-  startingTurn: number;
+  scenarioId: string;
+  /** Only for scenarios that offer a choice of map. */
+  mapId?: string;
+  startingTurn?: number;
   side: Side;
-  /** Ids from the chosen map's optionalRules. All off by default. */
+  /** Ids from the scenario's optionalRules. Leave out to take the scenario's defaults. */
   optionalRules?: string[];
   flags?: {
     enforceTransports?: boolean;
@@ -28,5 +30,13 @@ export interface CreateResponse { id: string; side: Side; seatToken: string; inv
 export interface ClaimResponse { side: Side; seatToken: string }
 export interface InfoResponse {
   lanUrls: string[];
-  maps: { id: string; name: string; optionalRules: { id: string; label: string }[] }[];
+  maps: { id: string; name: string }[];
+  scenarios: {
+    id: string;
+    label: string;
+    startingTurn: number;
+    defaultZones: { ijn: number; allies: number };
+    variants: { mapId: string; mapName: string; label?: string; bases: string[]; notes: { text: string; turns?: number[] }[] }[];
+    optionalRules: { id: string; label: string; default: boolean }[];
+  }[];
 }

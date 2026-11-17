@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  isCarrierNumber, numberFree, onBoard, other, SIDE_NAME, type Phase, type SeatView, type Side, type TaskForce,
+  areaHexes, getScenario, isCarrierNumber, numberFree, onBoard, other, scenarioNotes, SIDE_NAME,
+  type Phase, type SeatView, type Side, type TaskForce,
 } from '../../rules';
 import type { MapPin } from './HexMap';
 import { inviteKey, useBaseUrl, useMap, useSeat, type Send } from './net';
@@ -22,6 +23,7 @@ export function Game({ id }: { id: string }) {
   const base = useBaseUrl();
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [pinMode, setPinMode] = useState<PinMode>(() => (localStorage.getItem('tfb:pins') as PinMode) ?? 'all');
+  const [terrain, setTerrain] = useState(() => localStorage.getItem('tfb:terrain') === 'on');
 
   // Open the notices overlay whenever a new notice arrives.
   const seen = useRef(0);
@@ -44,17 +46,25 @@ export function Game({ id }: { id: string }) {
   // Sighting pins: the player's own one-time reports, kept on their map until the end of the game.
   const stamp = (p: { day: number; turn: number }) => p.day * 100 + p.turn;
   const newestPin = Math.max(0, ...view.pins.map(stamp));
+  const scenario0 = getScenario(view.scenarioId);
   const pins: MapPin[] = pinMode === 'off' ? [] : view.pins
     .filter((p) => pinMode === 'all' || stamp(p) === newestPin)
     .map((p) => {
       const when = `${p.day > 1 ? `D${p.day} ` : ''}T${p.turn}`;
       const old = stamp(p) < newestPin ? ' old' : '';
+      const counts = [p.carriers ? `${p.carriers}C` : '', p.fleets ? `${p.fleets}F` : ''].filter(Boolean).join(' ');
+      const area = p.kind === 'area' ? scenario0.areaSearches.find((a) => a.id === p.areaId) : undefined;
+      if (area) return { hexes: areaHexes(view.mapId, area), label: `${when} ${area.label.replace(/ \(.*/, '')}: ${counts}`, cls: old };
       return p.kind === 'pby'
         ? { hexes: [p.center], label: `${when} PBY`, cls: `pby${old}` }
         : { hexes: loaded.map.zone(p.center), label: `${when}: ${[p.carriers ? `${p.carriers}C` : '', p.fleets ? `${p.fleets}F` : ''].filter(Boolean).join(' ')}`, cls: old };
     });
   const cyclePins = () => { const m = NEXT_PIN[pinMode]; setPinMode(m); localStorage.setItem('tfb:pins', m); };
-  const ctx: Ctx = { view, send, loaded, rec, pins };
+  const hasTerrain = (loaded.def.land?.length ?? 0) + loaded.def.blockedHexsides.length > 0;
+  const toggleTerrain = () => { setTerrain(!terrain); localStorage.setItem('tfb:terrain', terrain ? 'off' : 'on'); };
+  const ctx: Ctx = { view, send, loaded, rec, pins, terrain: terrain && hasTerrain };
+  const scenario = getScenario(view.scenarioId);
+  const notes = scenarioNotes(scenario, view.mapId);
   const info = view.turnInfo;
   const opp = other(view.you);
   const playing = !['waiting', 'setup', 'ended'].includes(view.phase);
@@ -76,6 +86,7 @@ export function Game({ id }: { id: string }) {
         <span className="tools">
           {view.notices.length > 0 && <button className="small on" onClick={() => setOverlay('notices')}>Notices ({view.notices.length})</button>}
           {view.pins.length > 0 && <button className="small" title="Your sighting reports on the map" onClick={cyclePins}>Pins: {PIN_LABEL[pinMode]}</button>}
+          {hasTerrain && <button className={`small ${terrain ? 'on' : ''}`} title="Shade all-land hexes and outline the land and reef hexsides that block ships and contact" onClick={toggleTerrain}>Terrain</button>}
           {playing && <button className="small" onClick={() => setOverlay('board')}>On board{boardCount ? ` (${boardCount})` : ''}</button>}
           {view.phase !== 'waiting' && <button className="small" onClick={() => setOverlay('log')}>Log</button>}
           <button className="small" onClick={() => setOverlay('menu')}>Menu</button>
@@ -88,6 +99,7 @@ export function Game({ id }: { id: string }) {
         <span>{info.recon ? 'Reconnaissance this turn' : 'No reconnaissance this turn'}</span>
         {info.splits && <span>Splits allowed</span>}
         {info.dusk && <span>Dusk reset at the end of this turn</span>}
+        {notes.filter((n) => n.turns?.includes(view.turn)).map((n, i) => <span key={i} className="scen">{n.text}</span>)}
       </div>}
       {view.endRequest && view.phase !== 'ended' && <div className="banner">
         {view.endRequest === view.you
@@ -122,6 +134,9 @@ export function Game({ id }: { id: string }) {
       </Modal>}
       {overlay === 'menu' && <Modal title="Menu" close={() => setOverlay(null)}>
         <Menu id={id} view={view} send={send} reissue={seat.reissue} base={base} close={() => setOverlay(null)} />
+        <h3>{scenario.label}</h3>
+        <p className="muted small">Map: {loaded.def.name}. Reminders only: the app enforces none of these.</p>
+        <ul className="rules">{notes.map((n, i) => <li key={i}>{n.turns ? `Turn${n.turns.length > 1 ? 's' : ''} ${n.turns.join(', ')}: ` : ''}{n.text}</li>)}</ul>
       </Modal>}
       {seat.toast && <div className="toast" onClick={() => seat.setToast(null)}>{seat.toast}</div>}
     </div>

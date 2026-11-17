@@ -31,6 +31,8 @@ export function validateMoveOrder(state: GameState, side: Side, order: MoveOrder
       } else {
         if (!map.has(step)) fail(`Hex ${step} is not on the map`);
         if (!map.neighbors(at).includes(step)) fail(`Hex ${step} is not adjacent to ${at}`);
+        if (map.isLand(step)) fail(`Hex ${step} is all land`);
+        if (map.isBlocked(at, step)) fail(`Land or reef blocks the way from ${at} to ${step}`);
         at = step;
       }
     });
@@ -77,7 +79,7 @@ function moveSide(state: GameState, side: Side) {
         notify(state, side, 'exit', `${text} (TF ${n})`);
         break;
       }
-      if (!map.has(step) || !map.neighbors(tf.hex!).includes(step)) break;
+      if (!map.steps(tf.hex!).includes(step)) break;
       if (enemyAt(step)) {
         notify(state, side, 'blocked',
           `TF ${n} was blocked moving into ${step}: it stopped short at ${tf.hex} and lost the rest of its move.`);

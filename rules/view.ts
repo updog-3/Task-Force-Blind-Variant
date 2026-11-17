@@ -1,4 +1,4 @@
-import type { OptionalRule } from './hex';
+import type { OptionalRule } from './scenarios';
 import { availableSearches } from './recon';
 import { turnInfo, type TurnInfo } from './turnTable';
 import {
@@ -9,6 +9,7 @@ import {
 
 export interface SeatView {
   you: Side;
+  scenarioId: string;
   mapId: string;
   startingTurn: number;
   day: number;
@@ -50,6 +51,7 @@ export function viewFor(state: GameState, side: Side): SeatView {
   const ended = state.phase === 'ended';
   const view: SeatView = {
     you: side,
+    scenarioId: state.scenarioId,
     mapId: state.mapId,
     startingTurn: state.startingTurn,
     day: state.day,

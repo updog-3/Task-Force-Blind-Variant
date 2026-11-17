@@ -104,10 +104,19 @@ th, td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--
 .row > select.grow { flex: 1 1 8rem; }
 
 .pin { pointer-events: none; }
-.pin path { fill: none; stroke: #ffd35c; stroke-linecap: round; stroke-dasharray: 10 7; opacity: .9; }
+.pin path { fill: none; stroke: #ffd35c; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 14 8; opacity: .95; }
+.pinfill { pointer-events: none; stroke: rgba(10, 19, 28, .35); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.pinfill.report { fill: #ffd35c; } .pinfill.pby { fill: #7fe3ff; } .pinfill.draft { fill: #ff9a3d; }
+.pin.draft path { stroke: #ff9a3d; stroke-dasharray: none; opacity: 1; } .pin.draft text { fill: #ffb872; }
 .pin text { fill: #ffd35c; text-anchor: middle; font-weight: 700; paint-order: stroke; stroke: #0a131c; stroke-width: 4px; }
 .pin.pby path { stroke: #7fe3ff; } .pin.pby text { fill: #7fe3ff; }
 .pin.old { opacity: .55; }
 .rules { margin: .3rem 0; padding-left: 1.2rem; font-size: .85rem; line-height: 1.35; color: var(--muted); }
 .fill.raid { fill: rgba(255, 123, 107, .3); stroke: var(--bad); }
 .fill.found { fill: rgba(242, 184, 75, .3); stroke: var(--accent); }
+
+.landhex { fill: rgba(190, 60, 40, .45); stroke: none; pointer-events: none; }
+.sea ~ .landhex { fill: #5a6340; }
+.blockedside { fill: none; stroke: #ff3df2; stroke-linecap: round; pointer-events: none; }
+
+.reminders .scen { color: var(--accent); }

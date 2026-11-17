@@ -1,8 +1,8 @@
 import { REASON_TEXT, revealTf } from './contact';
 import { chitKind, drawChit } from './cup';
-import { hexDist, type OptionalRule } from './hex';
 import { getMap } from './maps';
 import type { Rng } from './rng';
+import { getScenario, type AreaSearch, type OptionalRule } from './scenarios';
 import { addLog, hiddenTfs, notify, trueType } from './tf';
 import { turnInfo } from './turnTable';
 import {
@@ -62,7 +62,7 @@ export function validateZones(state: GameState, side: Side, drafts: ZoneDraft[])
     const from = sourceHex(state, side, src) ?? d.sourceHex;
     if (!from || !map.has(from)) fail(`Enter the current board hex of ${label}`);
     if (!map.has(d.center)) fail(`Hex ${d.center} is not on the map`);
-    if (hexDist(from, d.center) > ZONE_RANGE) fail(`Zone centre ${d.center} is more than ${ZONE_RANGE} hexes from ${label}`);
+    if (map.dist(from, d.center) > ZONE_RANGE) fail(`Zone centre ${d.center} is more than ${ZONE_RANGE} hexes from ${label}`);
     return { id: `${side}-${i + 1}`, source: src, sourceHex: from, center: d.center };
   });
 }
@@ -125,10 +125,65 @@ export function resolveRecon(state: GameState, rng: Rng) {
       lines.push(`Zone ${zone.center}: ${counts ? `${counts} sighted` : 'No contact'}`);
       for (const t of r.targets) if (t.sighted) sighted.add(t.number);
     }
-    if (zones.length) notify(state, searcher, 'results', `Search results\n${lines.join('\n')}`);
+    // Scenario searches that run by themselves, e.g. the Ceylon patrol.
+    for (const area of getScenario(state.scenarioId).areaSearches.filter((a) => a.side === searcher)) {
+      const r = resolveArea(state, area, rng);
+      const counts = countText(r.carriers, r.fleets);
+      lines.push(`${area.label}: ${counts ? `${counts} sighted` : 'No contact'}`);
+      for (const t of r.targets) if (t.sighted) sighted.add(t.number);
+    }
+    if (lines.length) notify(state, searcher, 'results', `Search results\n${lines.join('\n')}`);
     if (sighted.size) notify(state, other(searcher), 'sighted', sightedText([...sighted]));
   }
   state.stage = 'resolved';
+}
+
+/** The hexes a scenario's area search covers. */
+export function areaHexes(mapId: string, area: AreaSearch): string[] {
+  const map = getMap(mapId);
+  return map.hexes.filter((h) => area.hexes.some((c) => map.dist(c, h) <= area.radius));
+}
+
+/**
+ * A scenario's free area search: one chit per enemy hidden Task Force in the area.
+ * The searcher is told counts by type for the whole area, with the usual Misdirect cap, and no hexes.
+ */
+export function resolveArea(state: GameState, area: AreaSearch, rng: Rng): SearchResult {
+  const owner = other(area.side);
+  const tfs = state.tfs[owner];
+  const inside = new Set(areaHexes(state.mapId, area));
+  const cap = hiddenTfs(tfs).filter((t) => trueType(tfs, t) === 'carrier').length;
+  const result: SearchResult = {
+    kind: 'area', side: area.side, day: state.day, turn: state.turn, areaId: area.id, center: area.hexes[0], radius: area.radius,
+    chits: [], cap, targets: [], carriers: 0, fleets: 0,
+  };
+  const drawn: string[] = [];
+  let sighted = 0, trueCarriers = 0, swappedFleets = 0;
+  for (const t of hiddenTfs(tfs).filter((x) => inside.has(x.hex!))) {
+    const chit = drawChit(state, rng);
+    const kind = chitKind(chit);
+    const type = trueType(tfs, t);
+    result.chits.push(chit);
+    result.targets.push({ number: t.number, hex: t.hex!, trueType: type, sighted: kind !== 'noContact' });
+    if (kind !== 'noContact') sighted++;
+    if (kind === 'detected' && type === 'carrier') trueCarriers++;
+    if (kind === 'misdirect' && type === 'fleet') swappedFleets++;
+    drawn.push(`${SIDE_NAME[owner]} TF ${t.number} at ${t.hex} (${type}): chit ${chit ?? 'none'} = ${kind}`);
+  }
+  // A Misdirect swaps the type, but the report never shows more carriers than the owner has hidden.
+  result.carriers = trueCarriers + Math.min(swappedFleets, Math.max(0, cap - trueCarriers));
+  result.fleets = sighted - result.carriers;
+  state.results.push(result);
+  if (result.carriers + result.fleets > 0) {
+    state.pins[area.side].push({
+      side: area.side, day: state.day, turn: state.turn, kind: 'area', center: area.hexes[0], areaId: area.id,
+      carriers: result.carriers, fleets: result.fleets,
+    });
+  }
+  addLog(state, area.side, 'search',
+    `${area.label}: ${drawn.length ? `${drawn.join('; ')}; cap ${cap}; reported ${countText(result.carriers, result.fleets) ?? 'no contact'}` : 'nothing in the area, no chits drawn'}`,
+    'end');
+  return result;
 }
 
 /** The owner learns only which of their own Task Forces were sighted: no type, no zone. */
@@ -140,7 +195,7 @@ function sightedText(numbers: number[]): string {
 /** The optional-rule searches a side may run right now. */
 export function availableSearches(state: GameState, side: Side): OptionalRule[] {
   if (state.phase !== 'board') return [];
-  return (getMap(state.mapId).def.optionalRules ?? []).filter((r) =>
+  return getScenario(state.scenarioId).optionalRules.filter((r) =>
     state.optionalRules.includes(r.id) && r.side === side && r.turns.includes(state.turn) && !state.rulesUsed.includes(r.id));
 }
 
@@ -159,7 +214,8 @@ export function optionalSearch(state: GameState, side: Side, ruleId: string, rng
     chits: [], targets: [], carriers: 0, fleets: 0,
   };
   const seen: TaskForce[] = [];
-  for (const t of hiddenTfs(tfs).filter((x) => hexDist(rule.center, x.hex!) <= rule.radius)) {
+  const map = getMap(state.mapId);
+  for (const t of hiddenTfs(tfs).filter((x) => map.dist(rule.center, x.hex!) <= rule.radius)) {
     const chit = drawChit(state, rng);
     const hit = chitKind(chit) !== 'noContact';
     result.chits.push(chit);

@@ -82,11 +82,12 @@ export interface SearchTarget {
 
 /** The full record of a search. Never sent to a player before the end of the game. */
 export interface SearchResult {
-  kind: 'zone' | 'pby';
+  kind: 'zone' | 'pby' | 'area';
   side: Side;
   day: number;
   turn: number;
   zoneId?: string;
+  areaId?: string;
   center: string;
   radius?: number;
   /** One entry per draw. null means the cup was empty under the noContact flag. */
@@ -104,9 +105,11 @@ export interface Pin {
   side: Side;
   day: number;
   turn: number;
-  kind: 'zone' | 'pby';
-  /** Zone centre, or the exact hex of a PBY "Fleet sighted". */
+  kind: 'zone' | 'pby' | 'area';
+  /** Zone centre, the exact hex of a PBY "Fleet sighted", or the first hex of a scenario search area. */
   center: string;
+  /** For kind 'area': the scenario's area search this report came from. */
+  areaId?: string;
   carriers?: number;
   fleets?: number;
 }
@@ -152,7 +155,8 @@ export type Phase = 'waiting' | 'setup' | 'movement' | 'board' | 'recon' | 'dusk
 export type Stage = '' | 'draft' | 'resolved';
 
 export interface GameState {
-  v: 2;
+  v: 3;
+  scenarioId: string;
   mapId: string;
   startingTurn: number;
   day: number;
@@ -160,7 +164,7 @@ export interface GameState {
   phase: Phase;
   stage: Stage;
   flags: Flags;
-  /** Ids of the map's optional rules enabled at creation. */
+  /** Ids of the scenario's optional rules enabled at creation. */
   optionalRules: string[];
   /** Optional-rule searches already run this turn. */
   rulesUsed: string[];

@@ -43,7 +43,9 @@ export class Sessions {
     let state;
     try {
       state = createGame({
-        mapId: req.mapId, startingTurn: Number(req.startingTurn), flags: req.flags as never, optionalRules: req.optionalRules,
+        scenarioId: req.scenarioId, mapId: req.mapId || undefined,
+        startingTurn: req.startingTurn === undefined ? undefined : Number(req.startingTurn),
+        flags: req.flags as never, optionalRules: req.optionalRules,
       });
     } catch (e) {
       throw new HttpError(400, e instanceof Error ? e.message : 'Bad request');

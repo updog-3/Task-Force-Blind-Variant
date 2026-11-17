@@ -11,14 +11,17 @@ export function game(
   place: { ijn?: Record<number, string>; allies?: Record<number, string> },
   flags?: Partial<Flags>,
   optionalRules: string[] = [],
+  mapId = 'midway',
 ): GameState {
-  let s = createGame({ mapId: 'midway', startingTurn: turn, flags, optionalRules });
+  // A map id picks the scenario normally played on it; a scenario id can be given directly.
+  const scenarioId = ({ midway: 'sc6', coralSea: 'sc5', easternSolomons: 'sc7', fleetVsFleet: 'sc8' } as Record<string, string>)[mapId] ?? mapId;
+  let s = createGame({ scenarioId, startingTurn: turn, flags, optionalRules });
   s = join(join(s, 'ijn'), 'allies');
   const r = rng();
   for (const side of ['ijn', 'allies'] as Side[]) {
     const entries = Object.entries(place[side] ?? {});
     // Every side needs one Task Force to finish setup; park a spare far away if none was given.
-    if (!entries.length) entries.push(['13', side === 'ijn' ? '0219' : '2919']);
+    if (!entries.length) entries.push(['13', side === 'ijn' ? '0219' : s.mapId === 'fleetVsFleet' ? '2125' : '2919']);
     for (const [n, hex] of entries) s = applyAction(s, side, { type: 'placeTf', number: Number(n), hex }, r);
   }
   s = applyAction(s, 'ijn', { type: 'confirm', value: true }, r);

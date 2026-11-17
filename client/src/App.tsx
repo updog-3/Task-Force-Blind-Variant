@@ -29,7 +29,8 @@ export function App() {
 
 function Home() {
   const [info, setInfo] = useState<InfoResponse | null>(null);
-  const [mapId, setMapId] = useState('midway');
+  const [scenarioId, setScenarioId] = useState('');
+  const [mapId, setMapId] = useState('');
   const [turn, setTurn] = useState(1);
   const [side, setSide] = useState<Side>('ijn');
   const [transports, setTransports] = useState(false);
@@ -39,12 +40,27 @@ function Home() {
   const [rules, setRules] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [link, setLink] = useState('');
-  useEffect(() => { api<InfoResponse>('/api/info').then(setInfo).catch(() => undefined); }, []);
+
+  const scenario = info?.scenarios.find((sc) => sc.id === scenarioId);
+  const variant = scenario?.variants.find((v) => v.mapId === mapId) ?? scenario?.variants[0];
+  /** Picking a scenario fills in everything it decides: map, starting turn, zone counts and its optional rules. */
+  const pick = (sc: InfoResponse['scenarios'][number]) => {
+    setScenarioId(sc.id);
+    setMapId(sc.variants[0].mapId);
+    setTurn(sc.startingTurn);
+    setZIjn(sc.defaultZones.ijn);
+    setZAllies(sc.defaultZones.allies);
+    setRules(sc.optionalRules.filter((r) => r.default).map((r) => r.id));
+    setError('');
+  };
+  useEffect(() => {
+    api<InfoResponse>('/api/info').then((i) => { setInfo(i); pick(i.scenarios[0]); }).catch(() => setError('Cannot reach the server.'));
+  }, []);
 
   const create = async () => {
     try {
       const r = await api<CreateResponse>('/api/sessions', {
-        mapId, startingTurn: turn, side, optionalRules: rules,
+        scenarioId, mapId, startingTurn: turn, side, optionalRules: rules,
         flags: { enforceTransports: transports, cupEmpty, defaultZones: { ijn: zIjn, allies: zAllies } },
       });
       localStorage.setItem(tokenKey(r.id), r.seatToken);
@@ -57,46 +73,52 @@ function Home() {
     if (m) go('/' + m[1]); else setError('Paste a full seat or invite link.');
   };
   const sessions = knownSessions();
-  // Optional rules belong to a map: only the selected map's are offered, all off by default.
-  const offered = info?.maps.find((m) => m.id === mapId)?.optionalRules ?? [];
 
   return (
     <div className="page">
       <h1>Task Force <span>Blind Search Tracker</span></h1>
-      <p className="muted">Referee for hidden Task Forces in an in-person, two-player game. Fleets, aircraft, combat and everything sighted stay on the paper sheets and the board.</p>
+      <p className="muted">Referee for hidden Task Forces in an in-person, two-player game. Fleets, aircraft, combat and everything revealed stay on the paper sheets and the board.</p>
       <section className="card">
         <h2>New game</h2>
-        <label>Map
-          <select value={mapId} onChange={(e) => { setMapId(e.target.value); setRules([]); }}>
-            {(info?.maps ?? [{ id: 'midway', name: 'Midway' }]).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        <label>Scenario
+          <select value={scenarioId} onChange={(e) => pick(info!.scenarios.find((sc) => sc.id === e.target.value)!)}>
+            {(info?.scenarios ?? []).map((sc) => <option key={sc.id} value={sc.id}>{sc.label}</option>)}
           </select>
         </label>
-        <label>Starting turn
-          <select value={turn} onChange={(e) => setTurn(Number(e.target.value))}>
-            {Array.from({ length: 24 }, (_, i) => <option key={i + 1}>{i + 1}</option>)}
-          </select>
-        </label>
+        {scenario && scenario.variants.length > 1
+          ? <label>Map
+            <select value={mapId} onChange={(e) => setMapId(e.target.value)}>
+              {scenario.variants.map((v) => <option key={v.mapId} value={v.mapId}>{v.label ?? v.mapName}</option>)}
+            </select>
+          </label>
+          : variant && <p className="muted small">Map: {variant.mapName}</p>}
         <label>Your side
           <select value={side} onChange={(e) => setSide(e.target.value as Side)}>
             <option value="ijn">IJN</option><option value="allies">Allies</option>
           </select>
         </label>
-        {offered.length > 0 && <>
-          <h3>Optional scenario rules</h3>
-          {offered.map((r) => (
+        {scenario && scenario.optionalRules.length > 0 && <>
+          <h3>Scenario rules</h3>
+          {scenario.optionalRules.map((r) => (
             <label className="check" key={r.id}>
               <input type="checkbox" checked={rules.includes(r.id)}
                 onChange={(e) => setRules(e.target.checked ? [...rules, r.id] : rules.filter((x) => x !== r.id))} /> {r.label}
             </label>
           ))}
         </>}
+        {variant && <details open>
+          <summary>What this scenario sets</summary>
+          <ul className="rules">
+            <li>Starts on turn {scenario!.startingTurn}; search zones per carrier: IJN {scenario!.defaultZones.ijn}, Allies {scenario!.defaultZones.allies}.</li>
+            <li>Land bases: {variant.bases.length ? variant.bases.join('; ') : 'none'}.</li>
+            {variant.notes.filter((n) => !n.turns).map((n, i) => <li key={i}>{n.text}</li>)}
+          </ul>
+        </details>}
         <details>
-          <summary>Options</summary>
-          <label className="check"><input type="checkbox" checked={transports} onChange={(e) => setTransports(e.target.checked)} /> Enforce transport movement limits</label>
-          <label>When the chit cup is empty
-            <select value={cupEmpty} onChange={(e) => setCupEmpty(e.target.value as 'reshuffle')}>
-              <option value="reshuffle">Reshuffle all 54 chits</option>
-              <option value="noContact">Every further draw is No Contact</option>
+          <summary>Change the scenario's settings</summary>
+          <label>Starting turn
+            <select value={turn} onChange={(e) => setTurn(Number(e.target.value))}>
+              {Array.from({ length: 24 }, (_, i) => <option key={i + 1}>{i + 1}</option>)}
             </select>
           </label>
           <label>Search zones per IJN carrier
@@ -105,8 +127,15 @@ function Home() {
           <label>Search zones per Allied carrier
             <input type="number" min={0} max={9} value={zAllies} onChange={(e) => setZAllies(Number(e.target.value))} />
           </label>
+          <label className="check"><input type="checkbox" checked={transports} onChange={(e) => setTransports(e.target.checked)} /> Enforce transport movement limits</label>
+          <label>When the chit cup is empty
+            <select value={cupEmpty} onChange={(e) => setCupEmpty(e.target.value as 'reshuffle')}>
+              <option value="reshuffle">Reshuffle all 54 chits</option>
+              <option value="noContact">Every further draw is No Contact</option>
+            </select>
+          </label>
         </details>
-        <button className="primary" onClick={create}>Create session</button>
+        <button className="primary" disabled={!scenario} onClick={create}>Create session</button>
         {error && <p className="error">{error}</p>}
       </section>
       <section className="card">
@@ -121,7 +150,7 @@ function Home() {
         </>}
       </section>
       <p className="muted small">
-        <a href="#/calibrate/midway">Calibrate the map grid</a>
+        <a href={`#/calibrate/${mapId || 'midway'}`}>Calibrate the map grid and check terrain</a>
         {info?.lanUrls[0] && <> · Other devices on this Wi-Fi: <b>{info.lanUrls[0]}</b></>}
       </p>
     </div>
@@ -150,10 +179,14 @@ function Calibrate({ mapId }: { mapId: string }) {
   const loaded = useMap(mapId);
   const [pts, setPts] = useState<{ x: number; y: number }[]>([]);
   const [saved, setSaved] = useState<Calibration | null>(null);
+  const [terrain, setTerrain] = useState(true);
+  const [maps, setMaps] = useState<InfoResponse['maps']>([]);
+  useEffect(() => { api<InfoResponse>('/api/info').then((i) => setMaps(i.maps)).catch(() => undefined); }, []);
+  useEffect(() => { setPts([]); setSaved(null); setMsg(''); }, [mapId]);
   const [msg, setMsg] = useState('');
-  if (!loaded) return <div className="page"><h1>Loading map…</h1></div>;
+  if (!loaded || loaded.def.id !== mapId) return <div className="page"><h1>Loading map…</h1></div>;
   const hexes = loaded.def.calibrationHexes;
-  const solved = pts.length === 3 ? solveCalibration(hexes, pts) : null;
+  const solved = pts.length === 3 ? solveCalibration(hexes, pts, loaded.def.lowColumns === 'odd') : null;
   const ok = solved && solved.dx > 0 && solved.dy > 0;
   const save = async () => {
     try {
@@ -165,7 +198,13 @@ function Calibrate({ mapId }: { mapId: string }) {
     <div className="calibrate">
       <div className="calbar">
         <a href="#/">← Home</a>
-        <b>Calibrate {loaded.def.name}</b>
+        <b>Calibrate</b>
+        <select className="small" value={mapId} onChange={(e) => go(`/calibrate/${e.target.value}`)}>
+          {maps.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <label className="check small" style={{ margin: 0 }} title="All-land hexes are shaded; land and reef hexsides that block ships are drawn in pink">
+          <input type="checkbox" checked={terrain} onChange={(e) => setTerrain(e.target.checked)} /> Show terrain data
+        </label>
         {!loaded.image && <span className="error">maps/{loaded.def.image} is missing: put the map image there first.</span>}
         {pts.length < 3
           ? <span>Zoom in and tap the centre of hex <b>{hexes[pts.length]}</b> ({pts.length + 1} of 3)</span>
@@ -177,7 +216,7 @@ function Calibrate({ mapId }: { mapId: string }) {
         {msg && <span>{msg}</span>}
       </div>
       <HexMap
-        loaded={loaded} numbers points={pts}
+        loaded={loaded} numbers terrain={terrain} points={pts}
         calibration={(ok ? solved : saved) ?? loaded.def.calibration}
         onPoint={(x, y) => { if (pts.length < 3) { setPts([...pts, { x, y }]); setMsg(''); } }}
       />

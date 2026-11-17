@@ -1,6 +1,7 @@
 export * from './types';
 export * from './hex';
 export * from './maps';
+export * from './scenarios';
 export * from './turnTable';
 export * from './cup';
 export * from './rng';
