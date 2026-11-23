@@ -1,6 +1,8 @@
 :root {
   --bg: #0f1b26; --panel: #17283a; --panel2: #1f3550; --line: #2e4a68; --text: #e8eef4; --muted: #9bb0c4;
   --accent: #f2b84b; --ijn: #e2674a; --allies: #6fa8e8; --ok: #5fc48a; --bad: #ff7b6b;
+  /* Marker fills: a dark tile for Fleet Task Forces, a brighter one for Carrier Task Forces. */
+  --ijn-dark: #5b2418; --ijn-cv: #a8402a; --allies-dark: #1b3a5e; --allies-cv: #2d64a0;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--text); background: var(--bg);
 }
 * { box-sizing: border-box; }
@@ -30,6 +32,9 @@ details summary { cursor: pointer; color: var(--muted); margin: .5rem 0; }
 code.link { display: block; background: #0a131c; border: 1px solid var(--line); border-radius: 8px; padding: .6rem; word-break: break-all; user-select: all; margin: .4rem 0; }
 
 .game { height: 100%; display: flex; flex-direction: column; }
+/* Your own markers, carrier numbers and carrier tags take the colours of the side you play. */
+.game[data-side=ijn] { --own: var(--ijn); --own-dark: var(--ijn-dark); --own-cv: var(--ijn-cv); }
+.game[data-side=allies] { --own: var(--allies); --own-dark: var(--allies-dark); --own-cv: var(--allies-cv); }
 .top { background: var(--panel); border-bottom: 1px solid var(--line); padding: .4rem .7rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .top .turn { font-weight: 700; font-size: 1.05rem; }
 .top .state { color: var(--accent); font-weight: 600; }
@@ -68,24 +73,24 @@ code.link { display: block; background: #0a131c; border: 1px solid var(--line); 
 .path { fill: none; stroke: var(--ok); stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .arrowhead { fill: var(--ok); }
 .token { pointer-events: none; }
-.token rect { fill: #10202e; stroke: var(--accent); }
+.token rect { fill: var(--own-dark, #10202e); stroke: var(--own, var(--accent)); }
 .token text { fill: #fff; text-anchor: middle; font-weight: 700; }
-.token.cv rect { fill: #5a2a12; } .token.onboard rect { fill: #2b2b2b; stroke: #aaa; stroke-dasharray: 6 4; }
-.token.ijn rect { fill: #5b2418; stroke: var(--ijn); } .token.allies rect { fill: #1b3a5e; stroke: var(--allies); }
+.token.cv rect { fill: var(--own-cv, #5a2a12); } .token.onboard rect { fill: #2b2b2b; stroke: #aaa; stroke-dasharray: 6 4; }
+.token.ijn rect { fill: var(--ijn-dark); stroke: var(--ijn); } .token.allies rect { fill: var(--allies-dark); stroke: var(--allies); }
 .token.ghost rect { fill: rgba(16, 32, 46, .75); stroke: var(--ok); stroke-dasharray: 5 4; } .token.ghost text { fill: var(--ok); }
 .calpoint { fill: #ff3df2; stroke: #fff; stroke-width: 2px; }
 
 .numgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .3rem; margin: .4rem 0; }
 .numgrid button { padding: .2rem 0; min-height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 .numgrid button small { color: var(--muted); font-size: .68rem; } .numgrid button.on small { color: #1c1503; }
-.numgrid button.cvnum { border-bottom: 3px solid var(--ijn); }
+.numgrid button.cvnum { border-bottom: 3px solid var(--own, var(--accent)); }
 .list { list-style: none; padding: 0; margin: .3rem 0; }
 .list li { display: flex; align-items: center; gap: .5rem; padding: .35rem .2rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .list li.selrow { background: var(--panel2); }
 .box { background: #122130; border: 1px solid var(--line); border-radius: 10px; padding: .6rem; margin: .5rem 0; }
 .box > .row { margin: .35rem 0; flex-wrap: wrap; }
 .tag { font-size: .72rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 .3rem; color: var(--muted); }
-.tag.cv { color: var(--ijn); border-color: var(--ijn); }
+.tag.cv { color: var(--own, var(--accent)); border-color: var(--own, var(--accent)); }
 .footer { position: sticky; bottom: -0.8rem; background: var(--panel); padding: .6rem 0 .8rem; margin-top: .6rem; border-top: 1px solid var(--line); }
 .footer button { width: 100%; }
 .overlay { position: fixed; inset: 0; background: rgba(5, 10, 15, .7); display: flex; align-items: flex-start; justify-content: center; padding: 3.2rem .6rem .6rem; z-index: 10; }

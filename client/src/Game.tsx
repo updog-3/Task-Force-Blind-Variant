@@ -72,7 +72,7 @@ export function Game({ id }: { id: string }) {
   const boardCount = view.tfs.filter(onBoard).length;
 
   return (
-    <div className="game">
+    <div className="game" data-side={view.you}>
       <div className="top">
         {view.phase !== 'waiting' && <span className="turn">{view.day > 1 ? `Day ${view.day} · ` : ''}Turn {view.turn}</span>}
         {playing && <span className="muted">{info.clock} · {info.period === 'night' ? '☾ Night' : '☀ Day'}</span>}
