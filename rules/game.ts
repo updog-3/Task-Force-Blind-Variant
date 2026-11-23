@@ -358,7 +358,8 @@ export function applyAction(prev: GameState, side: Side, action: Action, rng: Rn
         notify(state, other(side), 'offtarget',
           `Raid on ${check.hex}: the hex was empty, so the Task Forces revealed are in adjacent hexes. Pick one of those hexes to attack. ` +
           `This is an off-target raid (variant rules 6.7): just before interception, roll 1D6 for each attack group. ` +
-          `On a 4–6, a third of that group's aircraft counters (at least one) fail to find the target.`);
+          `On a 4–6, a third of that group's aircraft counters (at least one) fail to find the target. ` +
+          `Scenario penalties then apply to the counters that found it.`);
       }
       state.raidCheck[side] = null;
       break;

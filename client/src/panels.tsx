@@ -392,7 +392,7 @@ export function Board({ ctx }: { ctx: Ctx }) {
         </>}
       </div>}
       <details className="box" open>
-        <summary><b>Raid rules (blind game, scenario book 12.4.2)</b></summary>
+        <summary><b>Raid rules (variant rules 6)</b></summary>
         <ol className="rules">
           <li>Roll for raid order as in the rulebook.</li>
           <li>The attacker places aircraft on <i>any</i> hex in range, sighted or not.</li>
@@ -401,7 +401,7 @@ export function Board({ ctx }: { ctx: Ctx }) {
           <li>If the target hex is empty, the defender reveals every hidden Task Force in the six adjacent hexes. The attacker picks one of those hexes to attack: an off-target raid (variant rules 6.7).</li>
           <li>If nothing is in or next to the hex, the raid misses. The aircraft are spent and go to Landing.</li>
         </ol>
-        <p className="muted small">Off-target raids (variant rules 6.7): just before interception, the attacker rolls 1D6 for each attack group (all aircraft from the same base attacking the same hex). On a 4–6, a third of that group's aircraft counters fail to find the target, rounded, and at least one. The attacker picks which. They are not intercepted, do not attack, and return to base with the others.</p>
+        <p className="muted small">Off-target raids (variant rules 6.7): just before interception, the attacker rolls 1D6 for each attack group (all aircraft from the same base attacking the same hex). On a 4–6, a third of that group's aircraft counters fail to find the target, and at least one: 1–4 counters lose 1, 5–7 lose 2, 8–10 lose 3. The attacker picks which. They are not intercepted, do not attack, and return to base with the others. Scenario penalties, such as Midway's inexperience roll, then apply to the counters that found the target.</p>
       </details>
       <div className="box">
         <b>Check contacts</b>

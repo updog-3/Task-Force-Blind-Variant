@@ -150,9 +150,9 @@ Raids are played on the board. The app only reveals Task Forces, and offers the 
 5. If the target hex is empty, the defender reveals every hidden Task Force in the six adjacent hexes. The attacker picks one of those hexes to attack (see 6.7, Off-target raids).
 6. If nothing is in or next to the hex, the raid misses. The aircraft are spent and go to Landing.
 
-**6.7. Off-target raids.** When the target hex is empty and the attacker switches to an adjacent hex (step 5), the attacker rolls 1D6 for each attack group (all aircraft from the same base attacking the same hex), just before interception. On a 4–6, a third of that group’s aircraft counters fail to locate the target, rounded to the nearest whole number (0.5 is 1). At least one counter fails. Those counters are not intercepted and do not attack, but return to base with the others. The attacking player chooses which counters fail to find the target.
+**6.7. Off-target raids.** When the target hex is empty and the attacker switches to an adjacent hex (step 5), the attacker rolls 1D6 for each attack group (all aircraft from the same base attacking the same hex), just before interception. On a 4–6, a third of that group’s aircraft counters fail to locate the target, rounded to the nearest whole number, and always at least one: groups of 1–4 counters lose 1, 5–7 lose 2, and 8–10 lose 3. A lone counter therefore always fails. Those counters are not intercepted and do not attack, but return to base with the others. The attacking player chooses which counters fail to find the target.
 
-> **Note:** on-target raids keep whatever the scenario says, so Midway’s USN-only inexperience roll still applies there. The inexperience roll does not stack with the off-target roll.
+> **Note:** penalties stack, and the off-target roll comes first. Scenario penalties, such as Midway’s USN-only inexperience roll or the Swordfish night roll in scenario 9 (9.5.3), then apply as usual to the counters that found the target. On-target raids make only the scenario’s rolls.
 
 > **Note:** raids are flown, so land and reefs make no difference to steps 4 and 5.
 
