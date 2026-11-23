@@ -385,6 +385,7 @@ export function Board({ ctx }: { ctx: Ctx }) {
           <ul className="list">
             {check.groups.map((g) => <li key={g.hex}><b>{g.hex}</b><span>{g.numbers.map((n) => `TF ${n}`).join(', ')}</span></li>)}
           </ul>
+          {check.adjacent && <p className="small">Your opponent picks one of these hexes to attack. That makes it an off-target raid (variant rules 6.7): they roll 1D6 for each attack group just before interception. Revealing tells them so.</p>}
           <button className="danger" onClick={() => {
             if (confirm(`Reveal ${found.map((n) => `TF ${n}`).join(', ')} to your opponent as Raided?`)) send({ type: 'raidReveal' });
           }}>Reveal all</button>
@@ -397,9 +398,10 @@ export function Board({ ctx }: { ctx: Ctx }) {
           <li>The attacker places aircraft on <i>any</i> hex in range, sighted or not.</li>
           <li>Launching reveals the launching Task Force: reveal it here with the reason "Launched raid" and place it on the board, where range is checked.</li>
           <li>The defender reveals every hidden Task Force in the target hex, and the raid resolves against that hex.</li>
-          <li>If the target hex is empty, the defender reveals every hidden Task Force in the six adjacent hexes. The attacker picks one of those hexes to attack.</li>
+          <li>If the target hex is empty, the defender reveals every hidden Task Force in the six adjacent hexes. The attacker picks one of those hexes to attack: an off-target raid (variant rules 6.7).</li>
           <li>If nothing is in or next to the hex, the raid misses. The aircraft are spent and go to Landing.</li>
         </ol>
+        <p className="muted small">Off-target raids (variant rules 6.7): just before interception, the attacker rolls 1D6 for each attack group (all aircraft from the same base attacking the same hex). On a 4–6, a third of that group's aircraft counters fail to find the target, rounded, and at least one. The attacker picks which. They are not intercepted, do not attack, and return to base with the others.</p>
       </details>
       <div className="box">
         <b>Check contacts</b>

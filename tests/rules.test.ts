@@ -679,10 +679,17 @@ describe('raid check', () => {
     expect(tf(c, 'ijn', 7).lastHex).toBe('1005');
     expect(tf(c, 'ijn', 1).status).toBe('hidden');
     const told = c.notices.filter((n) => n.to === 'allies').map((n) => n.text);
-    expect(told).toEqual([
+    expect(told.slice(0, 3)).toEqual([
       'IJN TF 7 is revealed at 1005 (Raided).', 'IJN TF 8 is revealed at 1005 (Raided).', 'IJN TF 9 is revealed at 1006 (Raided).',
     ]);
+    // 1106 was empty, so the attacker is sent to the off-target raid rule.
+    expect(told).toHaveLength(4);
+    expect(told[3]).toMatch(/^Raid on 1106: the hex was empty.*off-target raid \(variant rules 6\.7\)/);
+    expect(c.notices.filter((n) => n.to === 'ijn' && n.kind === 'offtarget')).toEqual([]);
     expect(c.raidCheck.ijn).toBeNull();
+    // A raid that finds its target hex occupied is on target: no off-target notice.
+    const on = act(act(s, 'ijn', { type: 'raidCheck', hex: '1005' }), 'ijn', { type: 'raidReveal' });
+    expect(on.notices.filter((n) => n.kind === 'offtarget')).toEqual([]);
     // Launching a raid reveals the launching Task Force.
     const l = act(c, 'ijn', { type: 'reveal', number: 1, reason: 'launched' });
     expect(l.notices.at(-2)!.text).toBe('IJN TF 1 is revealed at 0303 (Launched raid).');

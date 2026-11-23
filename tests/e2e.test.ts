@@ -232,6 +232,7 @@ describe('a scripted two-seat Midway game, turns 1-11', () => {
         await allies.do({ type: 'raidReveal' });
         await until(() => ijn.view.notices.some((n) => n.kind === 'reveal'), 'raid reveal notice');
         expect(ijn.view.notices.find((n) => n.kind === 'reveal')!.text).toBe('Allied TF 7 is revealed at 2411 (Raided).');
+        expect(ijn.view.notices.find((n) => n.kind === 'offtarget')!.text).toMatch(/off-target raid \(variant rules 6\.7\)/);
         expect(allies.tf(7)).toMatchObject({ status: 'revealed', lastHex: '2411', revealReason: 'raided' });
         raided = true;
       }

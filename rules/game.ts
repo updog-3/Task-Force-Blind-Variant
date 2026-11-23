@@ -353,6 +353,13 @@ export function applyAction(prev: GameState, side: Side, action: Action, rng: Rn
       if (state.phase !== 'board' || !last) fail('Run a raid check first');
       const check = raidLookup(state, side, last.hex);
       for (const g of check.groups) for (const n of g.numbers) manualReveal(state, side, n, 'raided');
+      // The target hex was empty, so the raid switches to an adjacent hex: an off-target raid.
+      if (check.adjacent && check.groups.length) {
+        notify(state, other(side), 'offtarget',
+          `Raid on ${check.hex}: the hex was empty, so the Task Forces revealed are in adjacent hexes. Pick one of those hexes to attack. ` +
+          `This is an off-target raid (variant rules 6.7): just before interception, roll 1D6 for each attack group. ` +
+          `On a 4–6, a third of that group's aircraft counters (at least one) fail to find the target.`);
+      }
       state.raidCheck[side] = null;
       break;
     }
